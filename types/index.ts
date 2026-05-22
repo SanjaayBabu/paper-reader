@@ -11,13 +11,14 @@ export interface Citation {
   style: CitationStyle;
 }
 
-// ---- Content blocks (headings + paragraphs) ----
+// ---- Content blocks (headings + paragraphs + figures + tables) ----
 export interface ContentBlock {
-  type: "paragraph" | "heading";
+  type: "paragraph" | "heading" | "figure" | "table";
   html: string;   // HTML-safe (may contain <sup> tags for paragraphs)
   text: string;   // plain text (for ToC labels and anchors)
   level?: 2 | 3; // only for headings
   id: string;     // slug for anchor navigation
+  pageNumber?: number; // 1-indexed source PDF page number
 }
 
 // ---- API request/response shapes ----

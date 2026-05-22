@@ -4,21 +4,20 @@ import { normaliseHeading } from "./heading-detector";
 // ---- Citation regex patterns (most-to-least greedy) ----
 const PATTERNS: { style: CitationStyle; regex: RegExp }[] = [
   {
-    style: "multi-paren",
-    regex: /\([A-Z][a-zA-Zé'\-]+[^()]*?;\s*[A-Z][a-zA-Zé'\-]+[^()]*?\)/g,
-  },
-  {
+    // Parenthetical citations (unified multi-paren and single author-year)
+    // Matches (Smith, 2020) or (van Dijk et al., 2018; de Castro, 2019) or (see also O'Connor, 2021)
     style: "author-year-paren",
-    regex:
-      /\((?:[A-Z][a-zA-Zé'\-]+(?:\s+(?:&|and)\s+[A-Z][a-zA-Zé'\-]+)?(?:\s+et\s+al\.)?),\s*(?:19|20)\d{2}[a-z]?\)/g,
+    regex: /\(\s*([^()]*?[A-Z][^()]*?,\s*(?:19|20)\d{2}[a-z]?(?:\s*;\s*[^()]*?[A-Z][^()]*?,\s*(?:19|20)\d{2}[a-z]?)*)\)/g,
   },
   {
+    // Inline citations: Smith (2020) or Smith & Jones (2018) or de Castro et al. (2015)
     style: "author-year-inline",
-    regex: /\b[A-Z][a-zA-Zé'\-]+(?:\s+et\s+al\.)?\s+\((?:19|20)\d{2}[a-z]?\)/g,
+    regex: /\b((?:(?:[a-z]{2,4}\s+)?[A-Z][a-zA-Z'\-]*(?:\s+et\s+al\.)?)|(?:(?:[a-z]{2,4}\s+)?[A-Z][a-zA-Z'\-]*\s+(?:and|&)\s+(?:[a-z]{2,4}\s+)?[A-Z][a-zA-Z'\-]*))\s+\(((?:19|20)\d{2}[a-z]?)\)/g,
   },
   {
+    // Numbered citations in brackets, e.g. [1], [1, 2], [1-3], [1; 2]
     style: "numbered-bracket",
-    regex: /\[(\d+(?:\s*[,\-–]\s*\d+)*)\]/g,
+    regex: /\[\s*(\d+(?:\s*[\-–,;]\s*\d+)*)\s*\]/g,
   },
 ];
 
@@ -307,6 +306,7 @@ export function extractCitations(
   let seenFirstHeading = false;
   const frontMatterBuffer: string[] = [];
   let paragraphBuffer: string[] = [];
+  let currentPageNumber = 1;
 
   function makeHeadingId(text: string): string {
     const baseSlug = slugify(text);
@@ -322,8 +322,38 @@ export function extractCitations(
     if (!raw) return;
     const plainText = raw.replace(/<sup[^>]*>.*?<\/sup>/g, "").trim();
     if (isPageHeaderOrFooter(plainText) || plainText.length < 15) return;
-    const id = "p-" + blocks.filter((b) => b.type === "paragraph").length;
-    blocks.push({ type: "paragraph", html: raw, text: plainText, id });
+
+    const figureMatch = plainText.match(/^(?:Figure|Fig\.)\s+(\d+)/i);
+    const tableMatch = plainText.match(/^(?:Table)\s+(\d+)/i);
+
+    if (figureMatch) {
+      const id = "fig-" + blocks.filter((b) => b.type === "figure").length;
+      blocks.push({
+        type: "figure",
+        html: raw,
+        text: plainText,
+        id,
+        pageNumber: currentPageNumber,
+      });
+    } else if (tableMatch) {
+      const id = "tbl-" + blocks.filter((b) => b.type === "table").length;
+      blocks.push({
+        type: "table",
+        html: raw,
+        text: plainText,
+        id,
+        pageNumber: currentPageNumber,
+      });
+    } else {
+      const id = "p-" + blocks.filter((b) => b.type === "paragraph").length;
+      blocks.push({
+        type: "paragraph",
+        html: raw,
+        text: plainText,
+        id,
+        pageNumber: currentPageNumber,
+      });
+    }
   }
 
   for (const line of lines) {
@@ -331,6 +361,13 @@ export function extractCitations(
 
     if (!trimmedLine) {
       flushParagraph();
+      continue;
+    }
+
+    const pageMarkerMatch = trimmedLine.match(/^---PAGE_NUMBER_(\d+)---$/);
+    if (pageMarkerMatch) {
+      flushParagraph();
+      currentPageNumber = parseInt(pageMarkerMatch[1], 10);
       continue;
     }
 
@@ -372,6 +409,7 @@ export function extractCitations(
         text: heading.text,
         level: heading.level,
         id: makeHeadingId(heading.text),
+        pageNumber: currentPageNumber,
       });
       continue;
     }

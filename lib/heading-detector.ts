@@ -15,6 +15,8 @@ import Groq from "groq-sdk";
 export interface PaperStructure {
   headings: Set<string>;      // section / subsection labels
   frontMatter: Set<string>;   // metadata lines to keep out of the body
+  title?: string;
+  authors?: string;
 }
 
 /** Normalise a string for comparison: lowercase, collapse whitespace, strip
@@ -56,8 +58,10 @@ export async function detectHeadingsWithClaude(
 
   const prompt = `You are analysing candidate lines extracted from an academic research paper PDF.
 
-Return a JSON object with exactly TWO arrays:
+Return a JSON object with exactly FOUR fields:
 
+"title": A clean string containing the exact main title of the paper.
+"authors": A clean string containing the names of the authors of the paper (e.g. "John Doe, Jane Smith").
 "section_headings": Lines that are section or subsection HEADINGS of the paper body.
   INCLUDE: numbered sections ("1 Introduction", "2.1 Methods"), named sections ("Abstract", "Results", "Discussion", "Conclusion"), subsection titles.
   These are SHORT LABELS — not sentences, not list items.
@@ -71,7 +75,7 @@ Rules:
 - Full sentences and paragraph fragments go in neither array.
 - If unsure, omit the line.
 
-Return ONLY valid JSON like: {"section_headings": [...], "front_matter": [...]}
+Return ONLY valid JSON like: {"title": "...", "authors": "...", "section_headings": [...], "front_matter": [...]}
 
 Candidate lines:
 ${candidates.join("\n")}`;
@@ -105,6 +109,8 @@ ${candidates.join("\n")}`;
     return {
       headings: toSet(parsed.section_headings),
       frontMatter: toSet(parsed.front_matter),
+      title: typeof parsed.title === "string" ? parsed.title.trim() : undefined,
+      authors: typeof parsed.authors === "string" ? parsed.authors.trim() : undefined,
     };
   } catch {
     return empty;

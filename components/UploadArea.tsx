@@ -47,6 +47,28 @@ export default function UploadArea() {
       const result: ParseApiResponse = json;
       if (typeof window !== "undefined") {
         sessionStorage.setItem("paperReader:result", JSON.stringify(result));
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const dbRequest = indexedDB.open("pdf_db", 1);
+            dbRequest.onerror = () => reject(dbRequest.error);
+            dbRequest.onsuccess = () => {
+              const db = dbRequest.result;
+              const transaction = db.transaction("pdfs", "readwrite");
+              const store = transaction.objectStore("pdfs");
+              const putRequest = store.put(file, "current_paper_pdf");
+              putRequest.onsuccess = () => resolve();
+              putRequest.onerror = () => reject(putRequest.error);
+            };
+            dbRequest.onupgradeneeded = () => {
+              const db = dbRequest.result;
+              if (!db.objectStoreNames.contains("pdfs")) {
+                db.createObjectStore("pdfs");
+              }
+            };
+          });
+        } catch (dbErr) {
+          console.error("Failed to save PDF to IndexedDB", dbErr);
+        }
       }
       router.push("/reader");
     } catch {

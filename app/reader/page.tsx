@@ -6,13 +6,16 @@ import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReaderView from "@/components/ReaderView";
 import CitationNetwork from "@/components/CitationNetwork";
-import { BookOpen, Network, ArrowLeft } from "lucide-react";
+import { BookOpen, Network, ArrowLeft, FileText } from "lucide-react";
 import type { ParseApiResponse } from "@/types";
 
 export default function ReaderPage() {
   const router = useRouter();
   const [result, setResult] = useState<ParseApiResponse | null>(null);
   const [ready, setReady] = useState(false);
+  const [activeTab, setActiveTab] = useState("clean");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfPage, setPdfPage] = useState<number>(1);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -29,6 +32,54 @@ export default function ReaderPage() {
     }
     setReady(true);
   }, [router]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const loadPdf = async () => {
+      try {
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          const dbRequest = indexedDB.open("pdf_db", 1);
+          dbRequest.onerror = () => reject(dbRequest.error);
+          dbRequest.onsuccess = () => {
+            const db = dbRequest.result;
+            if (!db.objectStoreNames.contains("pdfs")) {
+              reject(new Error("Store not found"));
+              return;
+            }
+            const transaction = db.transaction("pdfs", "readonly");
+            const store = transaction.objectStore("pdfs");
+            const getRequest = store.get("current_paper_pdf");
+            getRequest.onsuccess = () => {
+              if (getRequest.result) {
+                resolve(getRequest.result);
+              } else {
+                reject(new Error("PDF not found in DB"));
+              }
+            };
+            getRequest.onerror = () => reject(getRequest.error);
+          };
+        });
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+      } catch (err) {
+        console.error("Failed to load PDF from IndexedDB", err);
+      }
+    };
+    loadPdf();
+  }, [ready]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
+
+  const handleJumpToPage = (pageNum: number) => {
+    setPdfPage(pageNum);
+    setActiveTab("original");
+  };
 
   if (!ready || !result) {
     return (
@@ -61,7 +112,7 @@ export default function ReaderPage() {
       </header>
 
       {/* Tabs — min-h-0 lets the flex child shrink so overflow-y-auto activates */}
-      <Tabs defaultValue="clean" className="flex-1 flex flex-col min-h-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <div className="border-b px-6 bg-white shrink-0">
           <TabsList className="h-10 bg-transparent gap-1 p-0">
             <TabsTrigger
@@ -78,6 +129,13 @@ export default function ReaderPage() {
               <Network className="w-3.5 h-3.5 mr-1.5" />
               Citation Network
             </TabsTrigger>
+            <TabsTrigger
+              value="original"
+              className="data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-700 rounded-none px-4 text-sm"
+            >
+              <FileText className="w-3.5 h-3.5 mr-1.5" />
+              Original PDF
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -88,11 +146,27 @@ export default function ReaderPage() {
             citations={result.citations}
             title={result.title}
             frontMatter={result.frontMatter}
+            onJumpToPage={handleJumpToPage}
           />
         </TabsContent>
 
         <TabsContent value="network" className="flex-1 min-h-0 mt-0 overflow-hidden">
           <CitationNetwork title={result.title} />
+        </TabsContent>
+
+        <TabsContent value="original" className="flex-1 min-h-0 mt-0 overflow-hidden bg-slate-100">
+          {pdfUrl ? (
+            <iframe
+              key={pdfPage}
+              src={`${pdfUrl}#page=${pdfPage}`}
+              className="w-full h-full border-0"
+              id="original-pdf-iframe"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-500">
+              Loading original PDF...
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Image, TableProperties, Eye } from "lucide-react";
 import type { Citation, ContentBlock } from "@/types";
 import FootnoteList from "./FootnoteList";
 import TableOfContents from "./TableOfContents";
@@ -11,9 +11,10 @@ interface Props {
   citations: Citation[];
   title: string;
   frontMatter?: string;
+  onJumpToPage?: (pageNumber: number) => void;
 }
 
-export default function ReaderView({ blocks, citations, title, frontMatter }: Props) {
+export default function ReaderView({ blocks, citations, title, frontMatter, onJumpToPage }: Props) {
   const hasCitations = citations.length > 0;
   const hasHeadings = blocks.some((b) => b.type === "heading");
   const [metaOpen, setMetaOpen] = useState(false);
@@ -79,6 +80,54 @@ export default function ReaderView({ blocks, citations, title, frontMatter }: Pr
                 </Tag>
               );
             }
+
+            if (block.type === "figure" || block.type === "table") {
+              const isFigure = block.type === "figure";
+              const Icon = isFigure ? Image : TableProperties;
+              const accentColor = isFigure
+                ? "border-blue-500 bg-blue-50/50 hover:bg-blue-50"
+                : "border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50";
+              const iconColor = isFigure ? "text-blue-600" : "text-emerald-600";
+              const badgeBg = isFigure ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800";
+
+              return (
+                <div
+                  key={block.id}
+                  className={`my-6 rounded-xl border-l-4 p-5 shadow-sm transition-all duration-200 border border-y-slate-200 border-r-slate-200 ${accentColor}`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2.5 rounded-lg bg-white shadow-sm shrink-0 ${iconColor}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeBg}`}>
+                          {isFigure ? "Figure" : "Table"}
+                        </span>
+                        {block.pageNumber && (
+                          <span className="text-xs text-slate-500 font-medium">
+                            Page {block.pageNumber}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-slate-700 leading-relaxed mb-3">
+                        {block.text}
+                      </p>
+                      {block.pageNumber && onJumpToPage && (
+                        <button
+                          onClick={() => onJumpToPage(block.pageNumber!)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View in Original PDF
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <p
                 key={block.id}
